@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import './App.css'
+import { useMobileDetection } from './hooks/useMobileDetection'
+import { MobileApp } from './components'
 
 type Mode = 'winners' | 'teams'
 
-function App() {
+function DesktopApp() {
   const [mode, setMode] = useState<Mode>('winners')
   const [names, setNames] = useState<string[]>(['', ''])
   const [winnerCount, setWinnerCount] = useState(1)
@@ -272,6 +274,16 @@ function App() {
       </div>
     </div>
   )
+}
+
+function App() {
+  const isMobile = useMobileDetection()
+
+  if (isMobile) {
+    return <MobileApp />
+  }
+
+  return <DesktopApp />
 }
 
 export default App
