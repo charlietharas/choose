@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 type Mode = 'winners' | 'teams'
 
@@ -7,6 +7,19 @@ interface Touch {
   x: number
   y: number
 }
+
+const FINGER_COLORS = [
+  '#e74c3c',
+  '#3498db',
+  '#2ecc71',
+  '#9b59b6',
+  '#f39c12',
+  '#e67e22',
+  '#1abc9c',
+  '#34495e',
+]
+
+const TEAM_COLORS = ['#e74c3c', '#27ae60']
 
 export const MobileApp: React.FC = () => {
   const [mode, setMode] = useState<Mode>('winners')
@@ -17,16 +30,9 @@ export const MobileApp: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false)
   const [selectedTouches, setSelectedTouches] = useState<number[]>([])
   const [showingResults, setShowingResults] = useState(false)
-
-  const resetCountdown = useCallback(() => {
-    setCountdown(0)
-    setIsCountingDown(false)
-  }, [])
-
-  const startCountdown = useCallback(() => {
-    setCountdown(4)
-    setIsCountingDown(true)
-  }, [])
+  const activeFingerCount = useRef(0)
+  const stabilityTimer = useRef<number | null>(null)
+  const handleSelectionRef = useRef<() => void>(() => {})
 
   const handleSelection = useCallback(() => {
     setShowingResults(true)
@@ -46,6 +52,11 @@ export const MobileApp: React.FC = () => {
     }, 5000)
   }, [mode, winnerCount, touches])
 
+  // Update the ref whenever handleSelection changes
+  useEffect(() => {
+    handleSelectionRef.current = handleSelection
+  }, [handleSelection])
+
   useEffect(() => {
     let interval: number | null = null
 
@@ -54,7 +65,7 @@ export const MobileApp: React.FC = () => {
         setCountdown(prev => {
           if (prev <= 1) {
             setIsCountingDown(false)
-            handleSelection()
+            handleSelectionRef.current?.()
             return 0
           }
           return prev - 1
@@ -65,12 +76,29 @@ export const MobileApp: React.FC = () => {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [isCountingDown, countdown, handleSelection])
+  }, [isCountingDown, countdown])
+
+  const triggerCountdownCheck = useCallback(() => {
+    // Clear any existing stability timer
+    if (stabilityTimer.current) {
+      clearTimeout(stabilityTimer.current)
+    }
+
+    // Always stop countdown immediately
+    setCountdown(0)
+    setIsCountingDown(false)
+
+    // Set new timer to check after stability period
+    stabilityTimer.current = setTimeout(() => {
+      if (activeFingerCount.current >= 2) {
+        setCountdown(4)
+        setIsCountingDown(true)
+      }
+    }, 1000)
+  }, [])
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
-      e.preventDefault()
-
       if (showingResults) return
 
       const newTouches: Touch[] = []
@@ -86,18 +114,18 @@ export const MobileApp: React.FC = () => {
 
       setTouches(newTouches)
 
-      if (newTouches.length > 0) {
-        resetCountdown()
-        setTimeout(startCountdown, 100)
+      // Only trigger countdown check if finger count changed
+      const newCount = newTouches.length
+      if (newCount !== activeFingerCount.current) {
+        activeFingerCount.current = newCount
+        triggerCountdownCheck()
       }
     },
-    [showingResults, resetCountdown, startCountdown]
+    [showingResults, triggerCountdownCheck]
   )
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      e.preventDefault()
-
       if (showingResults) return
 
       const updatedTouches: Touch[] = []
@@ -118,8 +146,6 @@ export const MobileApp: React.FC = () => {
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      e.preventDefault()
-
       if (showingResults) return
 
       const remainingTouches: Touch[] = []
@@ -135,23 +161,18 @@ export const MobileApp: React.FC = () => {
 
       setTouches(remainingTouches)
 
-      if (remainingTouches.length === 0) {
-        resetCountdown()
-      } else {
-        resetCountdown()
-        setTimeout(startCountdown, 100)
+      // Only trigger countdown check if finger count changed
+      const newCount = remainingTouches.length
+      if (newCount !== activeFingerCount.current) {
+        activeFingerCount.current = newCount
+        triggerCountdownCheck()
       }
     },
-    [showingResults, resetCountdown, startCountdown]
+    [showingResults, triggerCountdownCheck]
   )
 
   return (
-    <div
-      className="mobile-app"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="mobile-app">
       <div className="mobile-header">
         <h1 className="mobile-title">Choose</h1>
         <button className="settings-button" onClick={() => setShowSettings(true)}>
@@ -161,22 +182,29 @@ export const MobileApp: React.FC = () => {
 
       {isCountingDown && <div className="countdown-display">{countdown}</div>}
 
-      <div className="touch-area">
-        {touches.map(touch => {
-          let color = '#9b59b6'
+      <div
+        className="touch-area"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {touches.map((touch, index) => {
+          let color = FINGER_COLORS[index % FINGER_COLORS.length]
           const isSelected = selectedTouches.includes(touch.id)
 
-          if (mode === 'teams' && showingResults) {
-            const teamIndex = selectedTouches.indexOf(touch.id) % 2
-            color = teamIndex === 0 ? '#e74c3c' : '#27ae60'
-          } else if (mode === 'winners' && showingResults && !isSelected) {
-            color = 'transparent'
+          if (showingResults) {
+            if (mode === 'teams') {
+              const teamIndex = selectedTouches.indexOf(touch.id) % 2
+              color = TEAM_COLORS[teamIndex]
+            } else if (mode === 'winners' && !isSelected) {
+              color = 'transparent'
+            }
           }
 
           return (
             <div
               key={touch.id}
-              className={`touch-circle ${showingResults && !isSelected ? 'eliminated' : ''}`}
+              className={`touch-circle ${showingResults && mode === 'winners' && !isSelected ? 'eliminated' : ''}`}
               style={{
                 left: touch.x - 30,
                 top: touch.y - 30,
