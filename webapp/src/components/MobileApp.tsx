@@ -28,8 +28,26 @@ export const MobileApp: React.FC = () => {
     setIsCountingDown(true)
   }, [])
 
+  const handleSelection = useCallback(() => {
+    setShowingResults(true)
+
+    if (mode === 'winners') {
+      const shuffled = [...touches].sort(() => Math.random() - 0.5)
+      const winners = shuffled.slice(0, Math.min(winnerCount, touches.length))
+      setSelectedTouches(winners.map(t => t.id))
+    } else {
+      setSelectedTouches(touches.map(t => t.id))
+    }
+
+    setTimeout(() => {
+      setShowingResults(false)
+      setSelectedTouches([])
+      setTouches([])
+    }, 5000)
+  }, [mode, winnerCount, touches])
+
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
+    let interval: number | null = null
 
     if (isCountingDown && countdown > 0) {
       interval = setInterval(() => {
@@ -48,24 +66,6 @@ export const MobileApp: React.FC = () => {
       if (interval) clearInterval(interval)
     }
   }, [isCountingDown, countdown, handleSelection])
-
-  const handleSelection = useCallback(() => {
-    setShowingResults(true)
-
-    if (mode === 'winners') {
-      const shuffled = [...touches].sort(() => Math.random() - 0.5)
-      const winners = shuffled.slice(0, Math.min(winnerCount, touches.length))
-      setSelectedTouches(winners.map(t => t.id))
-    } else {
-      setSelectedTouches(touches.map(t => t.id))
-    }
-
-    setTimeout(() => {
-      setShowingResults(false)
-      setSelectedTouches([])
-      setTouches([])
-    }, 5000)
-  }, [mode, winnerCount, touches])
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
